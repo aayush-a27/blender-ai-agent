@@ -1,0 +1,31 @@
+# Blender AI Agent - Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Blender
+*.blend
+*.blend1
+*.blend2
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config (API keys, etc.)
+.env
+.local/
+config.json
+
+# Distribution
+*.zip
+dist/
+build/
