@@ -43,6 +43,14 @@ class BlenderAIAgentPreferences(AddonPreferences):
         precision=2,
     )
 
+    request_timeout: IntProperty(
+        name="Request Timeout (s)",
+        description="Total request timeout in seconds for API calls. Increase for complex scene generation.",
+        default=120,
+        min=30,
+        max=300,
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.label(text="NVIDIA Nemotron API Configuration", icon='PREFERENCES')
@@ -51,6 +59,7 @@ class BlenderAIAgentPreferences(AddonPreferences):
         layout.prop(self, "model_name")
         layout.prop(self, "max_tokens")
         layout.prop(self, "temperature")
+        layout.prop(self, "request_timeout")
         layout.separator()
         
         # Test Connection button
@@ -65,9 +74,16 @@ class BlenderAIAgentPreferences(AddonPreferences):
 class BlenderAIAgentProperties(PropertyGroup):
     ai_command: StringProperty(
         name="AI Command",
-        description="Natural language command for the AI agent",
+        description="Natural language command for the AI agent (legacy single-line, kept for compatibility)",
         default="",
         maxlen=2000,
+    )
+
+    ai_command_text_block: StringProperty(
+        name="AI Command Text Block",
+        description="Name of the text block used for multiline AI command input",
+        default="BlenderAICommand",
+        maxlen=64,
     )
 
     ai_status: EnumProperty(

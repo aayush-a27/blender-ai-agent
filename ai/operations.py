@@ -318,6 +318,23 @@ BLENDER_OPERATIONS = {
         },
         required_params=[],
     ),
+
+    # V5.3 - Radial Duplication
+    "object.duplicate_radial": OperationSchema(
+        operator="object.duplicate_radial",
+        description="Create radial duplicates of an object around a center point",
+        params={
+            "source": {"type": "string", "description": "Name of the source object to duplicate"},
+            "count": {"type": "integer", "default": 5, "min": 2, "max": 32, "description": "Number of total objects (including original if keep_original)"},
+            "center_x": {"type": "number", "default": 0.0, "description": "X coordinate of radial center"},
+            "center_y": {"type": "number", "default": 0.0, "description": "Y coordinate of radial center"},
+            "center_z": {"type": "number", "default": 0.0, "description": "Z coordinate of radial center"},
+            "axis": {"type": "string", "enum": ["X", "Y", "Z"], "default": "Z", "description": "Rotation axis for radial distribution"},
+            "angle_offset": {"type": "number", "default": 0.0, "description": "Starting angle offset in radians"},
+            "keep_original": {"type": "boolean", "default": True, "description": "Whether to keep the source object"},
+        },
+        required_params=["source"],
+    ),
 }
 
 

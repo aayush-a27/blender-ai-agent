@@ -1,8 +1,41 @@
 import bpy
 import os
 from bpy.types import Operator
+from mathutils import Vector, Matrix
+from math import radians, sin, cos
 from .ai.client import send_command, NVIDIAAPIError
 from .ai.actions import validate_action, execute_action, validate_actions, execute_actions, ValidationError
+
+
+class BLENDER_AI_AGENT_OT_edit_command(Operator):
+    """Open the Text Editor with the AI command datablock for multiline editing."""
+    bl_idname = "blender_ai_agent.edit_command"
+    bl_label = "Edit Command"
+    bl_description = "Open Text Editor to write/paste multiline AI command"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        props = context.scene.blender_ai_agent
+        text_block_name = props.ai_command_text_block or "BlenderAICommand"
+        text_block = bpy.data.texts.get(text_block_name)
+        if text_block is None:
+            text_block = bpy.data.texts.new(name=text_block_name)
+            props.ai_command_text_block = text_block_name
+
+        # 1. Try to find an existing TEXT_EDITOR area and use it
+        for window in context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == 'TEXT_EDITOR':
+                    area.spaces.active.text = text_block
+                    return {'FINISHED'}
+
+        # 2. No Text Editor exists - convert current area to TEXT_EDITOR directly
+        area = context.area
+        if area:
+            area.type = 'TEXT_EDITOR'
+            area.spaces.active.text = text_block
+
+        return {'FINISHED'}
 
 
 class OBJECT_OT_create_cube(Operator):
@@ -67,7 +100,136 @@ class OBJECT_OT_clear_scene(Operator):
     def execute(self, context):
         bpy.ops.object.select_all(action='SELECT')
         bpy.ops.object.delete()
-        self.report({'INFO'}, "Scene cleared")
+
+
+class OBJECT_OT_duplicate_radial(Operator):
+    """Duplicate an object radially around a center point."""
+    bl_idname = "object.duplicate_radial"
+    bl_label = "Duplicate Radial"
+    bl_description = "Create radial duplicates of an object around a center point"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    source: bpy.props.StringProperty(
+        name="Source Object",
+        description="Name of the source object to duplicate",
+        default="",
+    )
+
+    count: bpy.props.IntProperty(
+        name="Count",
+        description="Number of duplicates to create (including original if keep_original)",
+        default=5,
+        min=2,
+        max=32,
+    )
+
+    center_x: bpy.props.FloatProperty(
+        name="Center X",
+        description="X coordinate of radial center",
+        default=0.0,
+    )
+
+    center_y: bpy.props.FloatProperty(
+        name="Center Y",
+        description="Y coordinate of radial center",
+        default=0.0,
+    )
+
+    center_z: bpy.props.FloatProperty(
+        name="Center Z",
+        description="Z coordinate of radial center",
+        default=0.0,
+    )
+
+    axis: bpy.props.EnumProperty(
+        name="Axis",
+        description="Rotation axis for radial distribution",
+        items=[
+            ('X', "X", "Rotate around X axis"),
+            ('Y', "Y", "Rotate around Y axis"),
+            ('Z', "Z", "Rotate around Z axis"),
+        ],
+        default='Z',
+    )
+
+    angle_offset: bpy.props.FloatProperty(
+        name="Angle Offset",
+        description="Starting angle offset in radians",
+        default=0.0,
+    )
+
+    keep_original: bpy.props.BoolProperty(
+        name="Keep Original",
+        description="Whether to keep the source object",
+        default=True,
+    )
+
+    def execute(self, context):
+        # Get source object
+        source_obj = bpy.data.objects.get(self.source)
+        if not source_obj:
+            self.report({'ERROR'}, f"Source object '{self.source}' not found")
+            return {'CANCELLED'}
+
+        # Center point
+        center = Vector((self.center_x, self.center_y, self.center_z))
+
+        # Calculate angle step
+        angle_step = 2.0 * 3.14159265359 / self.count
+
+        # Determine rotation axis
+        if self.axis == 'X':
+            rot_axis = Vector((1, 0, 0))
+        elif self.axis == 'Y':
+            rot_axis = Vector((0, 1, 0))
+        else:
+            rot_axis = Vector((0, 0, 1))
+
+        # Calculate initial offset from center
+        offset = source_obj.location - center
+
+        # Determine starting angle from offset if angle_offset is 0 and offset has length
+        start_angle = self.angle_offset
+        if start_angle == 0.0 and offset.length > 0.0001:
+            # Project offset onto plane perpendicular to axis
+            if self.axis == 'Z':
+                start_angle = offset.to_2d().angle_signed(Vector((1, 0)), 0)
+            elif self.axis == 'Y':
+                start_angle = Vector((offset.x, offset.z)).angle_signed(Vector((1, 0)), 0)
+            else:  # X
+                start_angle = Vector((offset.y, offset.z)).angle_signed(Vector((1, 0)), 0)
+
+        created_objects = []
+        
+        for i in range(self.count):
+            if i == 0 and self.keep_original:
+                # Keep original at its position
+                created_objects.append(source_obj)
+                continue
+
+            # Calculate angle for this duplicate
+            angle = start_angle + i * angle_step
+
+            # Create duplicate
+            if i == 0 and not self.keep_original:
+                # First duplicate replaces original position
+                dup = source_obj
+            else:
+                dup = source_obj.copy()
+                dup.data = source_obj.data.copy()
+                context.collection.objects.link(dup)
+
+            # Rotate offset around axis
+            rot_mat = Matrix.Rotation(angle, 4, rot_axis)
+            new_offset = rot_mat @ offset
+            dup.location = center + new_offset
+
+            # Apply rotation to object
+            dup.rotation_euler.rotate(rot_mat)
+
+            created_objects.append(dup)
+
+        self.report({'INFO'}, f"Created {len(created_objects)} radial duplicates of '{self.source}'")
         return {'FINISHED'}
 
 
@@ -168,7 +330,15 @@ class OBJECT_OT_ai_command(Operator):
         props = context.scene.blender_ai_agent
         prefs = context.preferences.addons[__package__].preferences
 
-        user_command = self.command or props.ai_command
+        # Read command from text block (multiline support)
+        text_block_name = props.ai_command_text_block or "BlenderAICommand"
+        text_block = bpy.data.texts.get(text_block_name)
+        if text_block:
+            user_command = text_block.as_string()
+        else:
+            # Fallback to legacy single-line property
+            user_command = self.command or props.ai_command
+
         if not user_command.strip():
             self.report({'WARNING'}, "Empty command")
             return {'CANCELLED'}
@@ -176,6 +346,12 @@ class OBJECT_OT_ai_command(Operator):
         # Update status: Sending
         props.ai_status = 'SENDING'
         props.ai_error_message = ""
+
+        # Diagnostic logging for command verification
+        print(f"[BlenderAI Diagnostic] Command length: {len(user_command)} chars")
+        print(f"[BlenderAI Diagnostic] Newline count: {user_command.count(chr(10))}")
+        preview = user_command[:200].replace('\n', '\\n')
+        print(f"[BlenderAI Diagnostic] Command preview: {preview}{'...' if len(user_command) > 200 else ''}")
 
         try:
             # Collect scene context for context-aware planning
@@ -251,6 +427,8 @@ classes = (
     OBJECT_OT_ai_command,
     OBJECT_OT_execute_scene_plan,
     BLENDER_AI_AGENT_OT_test_connection,
+    BLENDER_AI_AGENT_OT_edit_command,
+    OBJECT_OT_duplicate_radial,
 )
 
 

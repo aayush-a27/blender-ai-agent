@@ -17,13 +17,41 @@ class VIEW3D_PT_blender_ai_agent(Panel):
         box = layout.box()
         box.label(text="AI Command", icon='CONSOLE')
 
-        row = box.row()
-        row.prop(props, "ai_command", text="")
+        # Use default text block name (property default is "BlenderAICommand")
+        text_block_name = props.ai_command_text_block or "BlenderAICommand"
+        text_block = bpy.data.texts.get(text_block_name)
+        if text_block is None:
+            # Text block will be created lazily by operators when needed
+            text_block = bpy.data.texts.new(name=text_block_name)
 
+        # Command preview (first few lines) + Edit button
+        cmd_text = text_block.as_string()
+        lines = cmd_text.split('\n')
+        preview_lines = lines[:5]
+        preview = '\n'.join(preview_lines)
+        if len(lines) > 5:
+            preview += f"\n... ({len(lines)} lines total)"
+
+        # Show preview in a label (read-only, multiline via line breaks)
+        if preview.strip():
+            for line in preview.split('\n'):
+                row = box.row()
+                row.enabled = False
+                row.label(text=line)
+        else:
+            row = box.row()
+            row.enabled = False
+            row.label(text="(empty - click Edit Command to write)")
+
+        # Edit Command button opens Text Editor
+        row = box.row()
+        row.operator("blender_ai_agent.edit_command", text="Edit Command", icon='TEXT')
+
+        # Execute button
         row = box.row()
         row.scale_y = 1.5
         op = row.operator("object.ai_command", text="Execute", icon='PLAY')
-        op.command = props.ai_command
+        op.command = ""
 
         # Status display
         status_row = box.row()

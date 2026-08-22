@@ -202,6 +202,9 @@ def _make_api_call(
     Returns tuple of (extracted_content, raw_api_response)
     Raises NVIDIAAPIError on failure with proper error_type.
     """
+    import time as time_mod
+    call_start = time_mod.time()
+    
     api_key = _get_api_key(preferences)
     if not api_key:
         raise NVIDIAAPIError(
@@ -243,22 +246,28 @@ def _make_api_call(
     try:
         response = urllib.request.urlopen(req, timeout=timeout)
         
+        elapsed = time_mod.time() - call_start
+        
         # Log HTTP response diagnostics
         status_code = response.getcode()
         content_type = response.headers.get('Content-Type', 'unknown')
         response_data = response.read().decode("utf-8")
         
-        _log_diagnostic(f"HTTP Response: status={status_code}, content_type={content_type}, length={len(response_data)} chars")
-        _log_diagnostic(f"RAW API RESPONSE:\n{response_data}")
+        _log_diagnostic(f"[Req {request_id}] Attempt {attempt + 1}: HTTP {status_code} in {elapsed:.1f}s (timeout={timeout}s)")
+        _log_diagnostic(f"[Req {request_id}] Response length: {len(response_data)} chars")
         
     except socket.timeout:
+        elapsed = time_mod.time() - call_start
+        _log_diagnostic(f"[Req {request_id}] Attempt {attempt + 1}: TIMEOUT after {elapsed:.1f}s (timeout={timeout}s)")
         raise NVIDIAAPIError(
             f"API request timed out after {timeout}s",
             error_type=ERROR_TYPE_TIMEOUT
         )
     except urllib.error.HTTPError as e:
+        elapsed = time_mod.time() - call_start
         error_body = e.read().decode("utf-8", errors="ignore")
         error_type = ERROR_TYPE_HTTP_503 if e.code == 503 else ERROR_TYPE_HTTP_ERROR
+        _log_diagnostic(f"[Req {request_id}] Attempt {attempt + 1}: HTTP {e.code} in {elapsed:.1f}s (timeout={timeout}s)")
         raise NVIDIAAPIError(
             f"API request failed (HTTP {e.code}): {error_body}",
             status_code=e.code,
@@ -266,17 +275,25 @@ def _make_api_call(
             error_type=error_type
         )
     except urllib.error.URLError as e:
+        elapsed = time_mod.time() - call_start
         if isinstance(e.reason, socket.timeout) or "timeout" in str(e.reason).lower():
+            _log_diagnostic(f"[Req {request_id}] Attempt {attempt + 1}: NETWORK TIMEOUT after {elapsed:.1f}s (timeout={timeout}s)")
             raise NVIDIAAPIError(
                 f"Network timeout: {e.reason}",
                 error_type=ERROR_TYPE_TIMEOUT
             )
+        _log_diagnostic(f"[Req {request_id}] Attempt {attempt + 1}: NETWORK ERROR after {elapsed:.1f}s: {e.reason}")
         raise NVIDIAAPIError(f"Network error: {e.reason}", error_type=ERROR_TYPE_NETWORK)
     except json.JSONDecodeError as e:
+        elapsed = time_mod.time() - call_start
+        _log_diagnostic(f"[Req {request_id}] Attempt {attempt + 1}: JSON DECODE ERROR after {elapsed:.1f}s: {e}")
         raise NVIDIAAPIError(f"Invalid JSON response from API: {e}", error_type=ERROR_TYPE_API_FORMAT)
     except Exception as e:
+        elapsed = time_mod.time() - call_start
         if "timeout" in str(e).lower():
+            _log_diagnostic(f"[Req {request_id}] Attempt {attempt + 1}: TIMEOUT after {elapsed:.1f}s: {e}")
             raise NVIDIAAPIError(f"Request timed out: {e}", error_type=ERROR_TYPE_TIMEOUT)
+        _log_diagnostic(f"[Req {request_id}] Attempt {attempt + 1}: ERROR after {elapsed:.1f}s: {e}")
         raise NVIDIAAPIError(f"Request failed: {e}", error_type=ERROR_TYPE_UNKNOWN)
 
     # Parse API response
@@ -308,11 +325,11 @@ def _make_api_call(
     total_tokens = usage.get("total_tokens", 0)
 
     # Diagnostic logging
-    _log_diagnostic(f"Finish reason: {finish_reason}")
-    _log_diagnostic(f"Token usage: prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
-    _log_diagnostic(f"Requested max_tokens: {max_tokens}")
-    _log_diagnostic(f"Extracted model content length: {len(content)} chars")
-    _log_diagnostic(f"Model content preview: {content[:200]}")
+    _log_diagnostic(f"[Req {request_id}] Finish reason: {finish_reason}")
+    _log_diagnostic(f"[Req {request_id}] Token usage: prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
+    _log_diagnostic(f"[Req {request_id}] Requested max_tokens: {max_tokens}")
+    _log_diagnostic(f"[Req {request_id}] Extracted content length: {len(content)} chars")
+    _log_diagnostic(f"[Req {request_id}] Content preview: {content[:200]}")
     
     return content, result
 
@@ -388,14 +405,13 @@ def _execute_with_retry(
 def send_command(
     user_command: str,
     preferences,
-    timeout: int = 60,
     scene_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Send a command to NVIDIA Nemotron API and return parsed JSON response.
     
     Features:
-    - Single timeout for complete request (default 60s)
+    - Configurable timeout from preferences (default 120s)
     - Bounded exponential backoff retry for transient errors (timeout, 503, network) - max 2 retries
     - One JSON repair retry on parse failure
     - Strict JSON validation before returning
@@ -405,7 +421,6 @@ def send_command(
     Args:
         user_command: Natural language command from user
         preferences: Blender addon preferences with API config
-        timeout: Total request timeout in seconds (default 60)
         scene_context: Optional current scene state for context-aware planning
     
     Returns:
@@ -414,7 +429,10 @@ def send_command(
     Raises:
         NVIDIAAPIError: On API errors, network issues, or invalid responses
     """
-    # Execute with retry logic using single timeout
+    # Read timeout from preferences (default 120s for complex scenes)
+    timeout = getattr(preferences, 'request_timeout', 120)
+    
+    # Execute with retry logic using configurable timeout
     content = _execute_with_retry(
         user_command, preferences, timeout,
         scene_context, max_retries=2, base_delay=1.0

@@ -53,6 +53,10 @@ create_plane
   - rotation (optional): array of 3 numbers [x, y, z] in radians, default [0, 0, 0]
   - scale (optional): array of 3 numbers [x, y, z], default [1, 1, 1]
   - name (optional): string name for the object
+  - transform_space (optional): "WORLD" or "LOCAL", default "WORLD".
+    - "WORLD": location/rotation/scale are world-space coordinates (backward compatible).
+    - "LOCAL": location/rotation/scale are relative to the parent object. Requires "parent" field.
+  - parent (optional): string name of parent object. If specified with transform_space="LOCAL", the plane is parented immediately with the supplied transform as local coordinates.
 
 create_object
   Parameters:
@@ -62,6 +66,10 @@ create_object
   - scale (optional): array of 3 numbers [x, y, z], default [1, 1, 1]
   - color (optional): array of 4 numbers [r, g, b, a] 0-1, default [0.8, 0.8, 0.8, 1]
   - name (optional): string name for the object
+  - transform_space (optional): "WORLD" or "LOCAL", default "WORLD". 
+    - "WORLD": location/rotation/scale are world-space coordinates (backward compatible).
+    - "LOCAL": location/rotation/scale are relative to the parent object. Requires "parent" field.
+  - parent (optional): string name of parent object. If specified with transform_space="LOCAL", the object is parented immediately with the supplied transform as local coordinates.
 
   Primitive-specific parameters:
   - cube: size (optional): number, default 2.0
@@ -77,6 +85,10 @@ create_light
   - color (optional): array of 3 numbers [r, g, b] 0-1, default [1.0, 1.0, 1.0]
   - location (optional): array of 3 numbers [x, y, z], default [0, 0, 0]
   - rotation (optional): array of 3 numbers [x, y, z] in radians, default [0, 0, 0]
+  - transform_space (optional): "WORLD" or "LOCAL", default "WORLD".
+    - "WORLD": location/rotation are world-space coordinates (backward compatible).
+    - "LOCAL": location/rotation are relative to the parent object. Requires "parent" field.
+  - parent (optional): string name of parent object. If specified with transform_space="LOCAL", the light is parented immediately with the supplied transform as local coordinates.
 
 create_camera
   Parameters:
@@ -85,6 +97,10 @@ create_camera
   - lens (optional): number, default 50.0 (focal length in mm)
   - sensor_width (optional): number, default 36.0 (sensor width in mm)
   - name (optional): string name for the object
+  - transform_space (optional): "WORLD" or "LOCAL", default "WORLD".
+    - "WORLD": location/rotation are world-space coordinates (backward compatible).
+    - "LOCAL": location/rotation are relative to the parent object. Requires "parent" field.
+  - parent (optional): string name of parent object. If specified with transform_space="LOCAL", the camera is parented immediately with the supplied transform as local coordinates.
 
 set_world_color
   Parameters:
@@ -153,6 +169,10 @@ create_empty
   - scale (optional): array of 3 numbers [x, y, z], default [1, 1, 1]
   - radius (optional): number, default 1.0
   - name (optional): string name for the object
+  - transform_space (optional): "WORLD" or "LOCAL", default "WORLD".
+    - "WORLD": location/rotation/scale are world-space coordinates (backward compatible).
+    - "LOCAL": location/rotation/scale are relative to the parent object. Requires "parent" field.
+  - parent (optional): string name of parent object. If specified with transform_space="LOCAL", the empty is parented immediately with the supplied transform as local coordinates.
 
 # v0.5 - Group/Asset Actions
 select_group
@@ -190,6 +210,10 @@ parent_objects
   Parameters:
   - parent (required): string name of parent object
   - children (required): array of strings (object names to parent to the parent)
+  - transform_space (optional): "WORLD" or "LOCAL", default "WORLD".
+    - "WORLD": preserves each child's current world transform after parenting (backward compatible).
+    - "LOCAL": sets each child's local transform to match its current world transform relative to the parent.
+  - keep_transform (optional): boolean, default true (legacy, use transform_space instead)
 
 unparent_objects
   Parameters:
@@ -315,7 +339,14 @@ Response:
 }
 
 COMPOSITE OBJECT RULES:
-For furniture or objects consisting of multiple primitive parts, represent each physical part as a separate action. Keep the entire response as one valid JSON object. Never omit commas between action objects. Use only documented action parameters.
+For furniture or objects consisting of multiple primitive parts, represent each physical part as a separate action. Keep the entire response as one valid valid JSON object. Never omit commas between action objects. Use only documented action parameters.
+
+TRANSFORM SPACE GUIDELINES:
+- Root/asset objects (created with create_empty) should normally use "WORLD" transform_space with absolute world coordinates.
+- Components of an asset (created with create_object, create_plane, etc.) should normally use "LOCAL" transform_space with coordinates relative to their asset root, and specify the "parent" field.
+- This allows the LLM to reason about asset position + component local geometry rather than calculating world coordinates for every component.
+- When using "LOCAL", the location/rotation/scale are interpreted relative to the parent's transform. Blender's hierarchy handles the world-space computation automatically.
+- Do NOT manually calculate world coordinates for child components when a parent is available.
 
 TABLE EXAMPLE:
 
@@ -332,15 +363,18 @@ Response:
       "action": "create_empty",
       "name": "Table",
       "empty_type": "PLAIN_AXES",
-      "location": [0, 0, 0]
+      "location": [0, 0, 0],
+      "transform_space": "WORLD"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Table_Top",
+      "parent": "Table",
       "location": [0, 0, 2.1],
       "scale": [3, 2, 0.2],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_material",
@@ -350,42 +384,70 @@ Response:
     {
       "action": "apply_material",
       "material": "wood",
-      "target": "active_object"
+      "target": "Table_Top"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Table_Leg_1",
+      "parent": "Table",
       "location": [2.5, 1.5, 1],
       "scale": [0.2, 0.2, 1],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Table_Leg_2",
+      "parent": "Table",
       "location": [-2.5, 1.5, 1],
       "scale": [0.2, 0.2, 1],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Table_Leg_3",
+      "parent": "Table",
       "location": [2.5, -1.5, 1],
       "scale": [0.2, 0.2, 1],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Table_Leg_4",
+      "parent": "Table",
       "location": [-2.5, -1.5, 1],
       "scale": [0.2, 0.2, 1],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
-      "action": "parent_objects",
+      "action": "apply_material",
+      "material": "wood",
+      "target": "Table_Leg_1"
+    },
+    {
+      "action": "apply_material",
+      "material": "wood",
+      "target": "Table_Leg_2"
+    },
+    {
+      "action": "apply_material",
+      "material": "wood",
+      "target": "Table_Leg_3"
+    },
+    {
+      "action": "apply_material",
+      "material": "wood",
+      "target": "Table_Leg_4"
+    }
+  ]
+}
       "parent": "Table",
       "children": ["Table_Top", "Table_Leg_1", "Table_Leg_2", "Table_Leg_3", "Table_Leg_4"]
     }
@@ -407,55 +469,68 @@ Response:
       "action": "create_empty",
       "name": "Chair",
       "empty_type": "PLAIN_AXES",
-      "location": [0, 0, 0]
+      "location": [0, 0, 0],
+      "transform_space": "WORLD"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Chair_Seat",
+      "parent": "Chair",
       "location": [0, 0, 0.8],
       "scale": [1, 1, 0.1],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Chair_Backrest",
+      "parent": "Chair",
       "location": [0, -1.05, 1.8],
       "scale": [1, 0.05, 1],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Chair_Leg_FL",
+      "parent": "Chair",
       "location": [-0.9, 0.9, 0.35],
       "scale": [0.075, 0.075, 0.35],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Chair_Leg_FR",
+      "parent": "Chair",
       "location": [0.9, 0.9, 0.35],
       "scale": [0.075, 0.075, 0.35],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Chair_Leg_RL",
+      "parent": "Chair",
       "location": [-0.9, -0.9, 0.35],
       "scale": [0.075, 0.075, 0.35],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_object",
       "object_type": "cube",
       "name": "Chair_Leg_RR",
+      "parent": "Chair",
       "location": [0.9, -0.9, 0.35],
       "scale": [0.075, 0.075, 0.35],
-      "size": 2
+      "size": 2,
+      "transform_space": "LOCAL"
     },
     {
       "action": "create_material",
@@ -491,9 +566,9 @@ Response:
       "action": "apply_material",
       "material": "wood",
       "target": "Chair_Leg_RR"
-    },
-    {
-      "action": "parent_objects",
+    }
+  ]
+}
       "parent": "Chair",
       "children": ["Chair_Seat", "Chair_Backrest", "Chair_Leg_FL", "Chair_Leg_FR", "Chair_Leg_RL", "Chair_Leg_RR"]
     }

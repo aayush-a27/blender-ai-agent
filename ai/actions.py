@@ -313,10 +313,22 @@ def _validate_parent_objects(data: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(child, str):
             raise ValidationError(f"children[{i}] must be a string (object name)")
     
+    # Validate transform_space for explicit control
+    transform_space = data.get("transform_space", "WORLD")
+    if transform_space not in ("WORLD", "LOCAL"):
+        raise ValidationError(f"'transform_space' must be 'WORLD' or 'LOCAL', got: {transform_space}")
+    
+    # keep_transform is legacy - maintained for backward compatibility
+    keep_transform = data.get("keep_transform", True)
+    if not isinstance(keep_transform, bool):
+        raise ValidationError("'keep_transform' must be a boolean")
+    
     return {
         "action": "parent_objects",
         "parent": parent_name,
         "children": children,
+        "transform_space": transform_space,
+        "keep_transform": keep_transform,
     }
 
 
@@ -361,6 +373,11 @@ def _validate_create_object(data: Dict[str, Any]) -> Dict[str, Any]:
     if obj_type not in SUPPORTED_OBJECT_TYPES:
         raise ValidationError(f"Unsupported object_type: {obj_type}. Supported: {SUPPORTED_OBJECT_TYPES}")
 
+    # Validate transform_space
+    transform_space = data.get("transform_space", "WORLD")
+    if transform_space not in ("WORLD", "LOCAL"):
+        raise ValidationError(f"'transform_space' must be 'WORLD' or 'LOCAL', got: {transform_space}")
+
     validated = {
         "action": "create_object",
         "object_type": obj_type,
@@ -368,6 +385,7 @@ def _validate_create_object(data: Dict[str, Any]) -> Dict[str, Any]:
         "rotation": _validate_vector3(data.get("rotation"), "rotation", default=(0, 0, 0)),
         "scale": _validate_vector3(data.get("scale"), "scale", default=(1, 1, 1)),
         "color": _validate_color(data.get("color"), default=(0.8, 0.8, 0.8, 1.0)),
+        "transform_space": transform_space,
     }
 
     # Optional name field
@@ -379,6 +397,20 @@ def _validate_create_object(data: Dict[str, Any]) -> Dict[str, Any]:
         if not name:
             raise ValidationError("'name' cannot be empty or whitespace")
         validated["name"] = name
+
+    # Optional parent field for creation-time parenting
+    parent = data.get("parent")
+    if parent is not None:
+        if not isinstance(parent, str):
+            raise ValidationError("'parent' must be a string (object name)")
+        parent = parent.strip()
+        if not parent:
+            raise ValidationError("'parent' cannot be empty or whitespace")
+        validated["parent"] = parent
+
+    # If LOCAL transform is requested, parent is required
+    if transform_space == "LOCAL" and "parent" not in validated:
+        raise ValidationError("'transform_space': 'LOCAL' requires a 'parent' field")
 
     # Primitive-specific parameters
     if obj_type == "torus":
@@ -582,6 +614,11 @@ def _validate_create_plane(data: Dict[str, Any]) -> Dict[str, Any]:
     if action != "create_plane":
         raise ValidationError(f"Expected action 'create_plane', got '{data.get('action')}'")
     
+    # Validate transform_space
+    transform_space = data.get("transform_space", "WORLD")
+    if transform_space not in ("WORLD", "LOCAL"):
+        raise ValidationError(f"'transform_space' must be 'WORLD' or 'LOCAL', got: {transform_space}")
+
     # Validate size
     size = data.get("size")
     if size is not None:
@@ -608,9 +645,23 @@ def _validate_create_plane(data: Dict[str, Any]) -> Dict[str, Any]:
             if not isinstance(v, (int, float)):
                 raise ValueError(f"rotation[{i}] must be a number")
     
+    # Optional parent field for creation-time parenting
+    parent = data.get("parent")
+    if parent is not None:
+        if not isinstance(parent, str):
+            raise ValidationError("'parent' must be a string (object name)")
+        parent = parent.strip()
+        if not parent:
+            raise ValidationError("'parent' cannot be empty or whitespace")
+    
+    # If LOCAL transform is requested, parent is required
+    if transform_space == "LOCAL" and parent is None:
+        raise ValidationError("'transform_space': 'LOCAL' requires a 'parent' field")
+
     # Build validated action
     validated = {
         "action": "create_plane",
+        "transform_space": transform_space,
     }
     
     # Optional parameters with defaults
@@ -637,6 +688,9 @@ def _validate_create_plane(data: Dict[str, Any]) -> Dict[str, Any]:
     if "name" in data:
         validated["name"] = str(data["name"])
     
+    if parent is not None:
+        validated["parent"] = parent
+    
     return validated
 
 
@@ -648,6 +702,11 @@ def _validate_create_camera(data: Dict[str, Any]) -> Dict[str, Any]:
     action = data.get("action")
     if action != "create_camera":
         raise ValidationError(f"Expected action 'create_camera', got '{data.get('action')}'")
+    
+    # Validate transform_space
+    transform_space = data.get("transform_space", "WORLD")
+    if transform_space not in ("WORLD", "LOCAL"):
+        raise ValidationError(f"'transform_space' must be 'WORLD' or 'LOCAL', got: {transform_space}")
     
     # Validate location
     location = data.get("location")
@@ -683,9 +742,23 @@ def _validate_create_camera(data: Dict[str, Any]) -> Dict[str, Any]:
         if sensor_width <= 0:
             raise ValidationError("'sensor_width' must be > 0")
     
+    # Optional parent field for creation-time parenting
+    parent = data.get("parent")
+    if parent is not None:
+        if not isinstance(parent, str):
+            raise ValidationError("'parent' must be a string (object name)")
+        parent = parent.strip()
+        if not parent:
+            raise ValidationError("'parent' cannot be empty or whitespace")
+    
+    # If LOCAL transform is requested, parent is required
+    if transform_space == "LOCAL" and parent is None:
+        raise ValidationError("'transform_space': 'LOCAL' requires a 'parent' field")
+
     # Build validated action
     validated = {
         "action": "create_camera",
+        "transform_space": transform_space,
     }
     
     # Optional parameters with defaults
@@ -711,6 +784,9 @@ def _validate_create_camera(data: Dict[str, Any]) -> Dict[str, Any]:
     
     if "name" in data:
         validated["name"] = str(data["name"])
+    
+    if parent is not None:
+        validated["parent"] = parent
     
     return validated
 
@@ -895,6 +971,11 @@ def _validate_create_empty(data: Dict[str, Any]) -> Dict[str, Any]:
     if action != "create_empty":
         raise ValidationError(f"Expected action 'create_empty', got '{data.get('action')}'")
     
+    # Validate transform_space
+    transform_space = data.get("transform_space", "WORLD")
+    if transform_space not in ("WORLD", "LOCAL"):
+        raise ValidationError(f"'transform_space' must be 'WORLD' or 'LOCAL', got: {transform_space}")
+
     # Validate empty type
     empty_type = data.get("empty_type")
     if empty_type is not None:
@@ -944,8 +1025,22 @@ def _validate_create_empty(data: Dict[str, Any]) -> Dict[str, Any]:
     if name is not None and not isinstance(name, str):
         raise ValidationError("'name' must be a string")
     
+    # Optional parent field for creation-time parenting
+    parent = data.get("parent")
+    if parent is not None:
+        if not isinstance(parent, str):
+            raise ValidationError("'parent' must be a string (object name)")
+        parent = parent.strip()
+        if not parent:
+            raise ValidationError("'parent' cannot be empty or whitespace")
+    
+    # If LOCAL transform is requested, parent is required
+    if transform_space == "LOCAL" and parent is None:
+        raise ValidationError("'transform_space': 'LOCAL' requires a 'parent' field")
+
     validated = {
         "action": "create_empty",
+        "transform_space": transform_space,
     }
     
     # Optional parameters with defaults
@@ -977,6 +1072,9 @@ def _validate_create_empty(data: Dict[str, Any]) -> Dict[str, Any]:
     if "name" in data:
         validated["name"] = str(data["name"])
     
+    if parent is not None:
+        validated["parent"] = parent
+    
     return validated
 
 
@@ -988,6 +1086,11 @@ def _validate_create_light(data: Dict[str, Any]) -> Dict[str, Any]:
     action = data.get("action")
     if action != "create_light":
         raise ValidationError(f"Expected action 'create_light', got '{data.get('action')}'")
+    
+    # Validate transform_space
+    transform_space = data.get("transform_space", "WORLD")
+    if transform_space not in ("WORLD", "LOCAL"):
+        raise ValidationError(f"'transform_space' must be 'WORLD' or 'LOCAL', got: {transform_space}")
     
     # Validate light_type
     light_type = data.get("light_type")
@@ -1034,11 +1137,25 @@ def _validate_create_light(data: Dict[str, Any]) -> Dict[str, Any]:
             if not isinstance(v, (int, float)):
                 raise ValueError(f"rotation[{i}] must be a number")
     
+    # Optional parent field for creation-time parenting
+    parent = data.get("parent")
+    if parent is not None:
+        if not isinstance(parent, str):
+            raise ValidationError("'parent' must be a string (object name)")
+        parent = parent.strip()
+        if not parent:
+            raise ValidationError("'parent' cannot be empty or whitespace")
+    
+    # If LOCAL transform is requested, parent is required
+    if transform_space == "LOCAL" and parent is None:
+        raise ValidationError("'transform_space': 'LOCAL' requires a 'parent' field")
+
     # Build validated action
     validated = {
         "action": "create_light",
         "light_type": data["light_type"],
         "brightness": float(data["brightness"]),
+        "transform_space": transform_space,
     }
     
     # Optional parameters with defaults
@@ -1056,6 +1173,9 @@ def _validate_create_light(data: Dict[str, Any]) -> Dict[str, Any]:
         validated["rotation"] = tuple(float(v) for v in data["rotation"])
     else:
         validated["rotation"] = (0.0, 0.0, 0.0)
+    
+    if parent is not None:
+        validated["parent"] = parent
     
     return validated
 
@@ -1251,36 +1371,47 @@ def _execute_scale_object(action: Dict[str, Any]) -> Tuple[bool, str]:
 
 
 def _execute_create_object(action: Dict[str, Any]) -> Tuple[bool, str]:
-    """Execute create_object action."""
+    """Execute create_object action with transform_space and parent support."""
     obj_type = action["object_type"]
     location = Vector(action["location"])
     rotation = action["rotation"]
     scale = action["scale"]
     color = action["color"]
     name = action.get("name")
+    transform_space = action.get("transform_space", "WORLD")
+    parent_name = action.get("parent")
     
-    # Create object at specified location (not cursor)
+    # Log transform mode
+    if parent_name:
+        _log_diagnostic(f"Creating object: name={name}, parent={parent_name}, transform_space={transform_space}, location={location}")
+    else:
+        _log_diagnostic(f"Creating object: name={name}, transform_space={transform_space}, location={location}")
+    
+    # Create object with unit scale to avoid double-scaling
+    # The operator's scale parameter scales the mesh geometry AND sets object.scale
+    # We want explicit control via obj.scale after creation
+    unit_scale = (1.0, 1.0, 1.0)
+    
     if obj_type == "cube":
         size = action.get("size", 2.0)
-        bpy.ops.mesh.primitive_cube_add(size=size, location=location, rotation=rotation, scale=scale)
+        bpy.ops.mesh.primitive_cube_add(size=size, location=location, rotation=rotation, scale=unit_scale)
     elif obj_type == "sphere":
         radius = action.get("radius", 1.0)
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=location, rotation=rotation, scale=scale)
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=location, rotation=rotation, scale=unit_scale)
     elif obj_type == "cylinder":
         radius = action.get("radius", 1.0)
         depth = action.get("depth", 2.0)
-        bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=depth, location=location, rotation=rotation, scale=scale)
+        bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=depth, location=location, rotation=rotation, scale=unit_scale)
     elif obj_type == "cone":
         radius1 = action.get("radius1", 1.0)
         radius2 = action.get("radius2", 0.0)
         depth = action.get("depth", 2.0)
-        bpy.ops.mesh.primitive_cone_add(radius1=radius1, radius2=radius2, depth=depth, location=location, rotation=rotation, scale=scale)
+        bpy.ops.mesh.primitive_cone_add(radius1=radius1, radius2=radius2, depth=depth, location=location, rotation=rotation, scale=unit_scale)
     elif obj_type == "torus":
         major_radius = action.get("major_radius", 1.0)
         minor_radius = action.get("minor_radius", 0.25)
         major_segments = action.get("major_segments", 48)
         minor_segments = action.get("minor_segments", 16)
-        # Torus operator doesn't support scale parameter, apply after creation
         bpy.ops.mesh.primitive_torus_add(
             major_radius=major_radius,
             minor_radius=minor_radius,
@@ -1294,9 +1425,10 @@ def _execute_create_object(action: Dict[str, Any]) -> Tuple[bool, str]:
     
     obj = bpy.context.active_object
     if obj:
-        # Apply scale for torus (since operator doesn't support it)
-        if obj_type == "torus":
-            obj.scale = scale
+        # Explicitly set the requested scale on the object (NOT via operator)
+        # This avoids double-scaling: operator scales mesh, then we set object.scale
+        obj.scale = scale
+        
         # Set name from action if provided
         requested_name = action.get("name")
         if requested_name:
@@ -1304,6 +1436,26 @@ def _execute_create_object(action: Dict[str, Any]) -> Tuple[bool, str]:
             _log_diagnostic(f"Created component: requested={requested_name}, actual={obj.name}")
         else:
             _log_diagnostic(f"Created component: {obj.name} (no name requested)")
+        
+        # Handle parenting if parent specified
+        if parent_name:
+            parent_obj = bpy.data.objects.get(parent_name)
+            if not parent_obj:
+                return False, f"Parent object '{parent_name}' not found"
+            
+            if transform_space == "LOCAL":
+                # For LOCAL: set the transform as local relative to parent
+                obj.parent = parent_obj
+                obj.location = location
+                obj.rotation_euler = rotation
+                obj.scale = scale
+                _log_diagnostic(f"  Parented '{obj.name}' to '{parent_name}' with LOCAL transform: loc={location}, rot={rotation}, scale={scale}")
+            else:
+                # For WORLD: preserve world transform after parenting
+                obj.parent = parent_obj
+                obj.matrix_parent_inverse = parent_obj.matrix_world.inverted()
+                _log_diagnostic(f"  Parented '{obj.name}' to '{parent_name}' with WORLD transform preserved")
+        
         _apply_color(obj, color)
         return True, f"Created {obj_type} at {location}"
     return False, "Object creation failed"
@@ -1481,7 +1633,7 @@ def _execute_bpy_op(action: Dict[str, Any]) -> Tuple[bool, str]:
 
 
 def _execute_create_light(action: Dict[str, Any]) -> Tuple[bool, str]:
-    """Execute create_light action using Blender 4.0.1 API.
+    """Execute create_light action using Blender 4.0.1 API with transform_space and parent support.
     
     Translates high-level parameters to Blender API:
     1. Creates light via bpy.ops.object.light_add()
@@ -1499,8 +1651,15 @@ def _execute_create_light(action: Dict[str, Any]) -> Tuple[bool, str]:
         light_type = action["light_type"]
         brightness = action["brightness"]
         color = action["color"]
-        location = action["location"]
+        location = Vector(action["location"])
         rotation = action["rotation"]
+        transform_space = action.get("transform_space", "WORLD")
+        parent_name = action.get("parent")
+        
+        if parent_name:
+            _log_diagnostic(f"Creating light: type={light_type}, parent={parent_name}, transform_space={transform_space}, location={location}")
+        else:
+            _log_diagnostic(f"Creating light: type={light_type}, transform_space={transform_space}, location={location}")
         
         # Step 1: Create light via operator (only operator args here)
         bpy.ops.object.light_add(
@@ -1520,8 +1679,21 @@ def _execute_create_light(action: Dict[str, Any]) -> Tuple[bool, str]:
         # Step 4: Set color
         light_obj.data.color = action["color"]
         
-        # Note: rotation was already applied by light_add operator
-        # No need to set rotation again
+        # Handle parenting if parent specified
+        if parent_name:
+            parent_obj = bpy.data.objects.get(parent_name)
+            if not parent_obj:
+                return False, f"Parent object '{parent_name}' not found"
+            
+            if transform_space == "LOCAL":
+                light_obj.parent = parent_obj
+                light_obj.location = location
+                light_obj.rotation_euler = rotation
+                _log_diagnostic(f"  Parented '{light_obj.name}' to '{parent_name}' with LOCAL transform")
+            else:
+                light_obj.parent = parent_obj
+                light_obj.matrix_parent_inverse = parent_obj.matrix_world.inverted()
+                _log_diagnostic(f"  Parented '{light_obj.name}' to '{parent_name}' with WORLD transform preserved")
         
         return True, f"Created {action['light_type']} light with brightness {action['brightness']} at {action['location']}"
         
@@ -1532,13 +1704,20 @@ def _execute_create_light(action: Dict[str, Any]) -> Tuple[bool, str]:
 
 
 def _execute_create_plane(action: Dict[str, Any]) -> Tuple[bool, str]:
-    """Execute create_plane action using Blender 4.0.1 API."""
+    """Execute create_plane action using Blender 4.0.1 API with transform_space and parent support."""
     try:
         size = action["size"]
-        location = action["location"]
+        location = Vector(action["location"])
         rotation = action["rotation"]
         scale = action["scale"]
         name = action.get("name")
+        transform_space = action.get("transform_space", "WORLD")
+        parent_name = action.get("parent")
+        
+        if parent_name:
+            _log_diagnostic(f"Creating plane: name={name}, parent={parent_name}, transform_space={transform_space}, location={location}")
+        else:
+            _log_diagnostic(f"Creating plane: name={name}, transform_space={transform_space}, location={location}")
         
         # Create plane via operator
         bpy.ops.mesh.primitive_plane_add(
@@ -1555,6 +1734,23 @@ def _execute_create_plane(action: Dict[str, Any]) -> Tuple[bool, str]:
         if name:
             obj.name = name
         
+        # Handle parenting if parent specified
+        if parent_name:
+            parent_obj = bpy.data.objects.get(parent_name)
+            if not parent_obj:
+                return False, f"Parent object '{parent_name}' not found"
+            
+            if transform_space == "LOCAL":
+                obj.parent = parent_obj
+                obj.location = location
+                obj.rotation_euler = rotation
+                obj.scale = scale
+                _log_diagnostic(f"  Parented '{obj.name}' to '{parent_name}' with LOCAL transform")
+            else:
+                obj.parent = parent_obj
+                obj.matrix_parent_inverse = parent_obj.matrix_world.inverted()
+                _log_diagnostic(f"  Parented '{obj.name}' to '{parent_name}' with WORLD transform preserved")
+        
         return True, f"Created plane '{obj.name}' with size {size} at {location}"
     
     except RuntimeError as e:
@@ -1564,13 +1760,20 @@ def _execute_create_plane(action: Dict[str, Any]) -> Tuple[bool, str]:
 
 
 def _execute_create_camera(action: Dict[str, Any]) -> Tuple[bool, str]:
-    """Execute create_camera action using Blender 4.0.1 API."""
+    """Execute create_camera action using Blender 4.0.1 API with transform_space and parent support."""
     try:
-        location = action["location"]
+        location = Vector(action["location"])
         rotation = action["rotation"]
         lens = action["lens"]
         sensor_width = action["sensor_width"]
         name = action.get("name")
+        transform_space = action.get("transform_space", "WORLD")
+        parent_name = action.get("parent")
+        
+        if parent_name:
+            _log_diagnostic(f"Creating camera: name={name}, parent={parent_name}, transform_space={transform_space}, location={location}")
+        else:
+            _log_diagnostic(f"Creating camera: name={name}, transform_space={transform_space}, location={location}")
         
         # Create camera via operator
         bpy.ops.object.camera_add(
@@ -1589,6 +1792,22 @@ def _execute_create_camera(action: Dict[str, Any]) -> Tuple[bool, str]:
         
         if name:
             obj.name = name
+        
+        # Handle parenting if parent specified
+        if parent_name:
+            parent_obj = bpy.data.objects.get(parent_name)
+            if not parent_obj:
+                return False, f"Parent object '{parent_name}' not found"
+            
+            if transform_space == "LOCAL":
+                obj.parent = parent_obj
+                obj.location = location
+                obj.rotation_euler = rotation
+                _log_diagnostic(f"  Parented '{obj.name}' to '{parent_name}' with LOCAL transform")
+            else:
+                obj.parent = parent_obj
+                obj.matrix_parent_inverse = parent_obj.matrix_world.inverted()
+                _log_diagnostic(f"  Parented '{obj.name}' to '{parent_name}' with WORLD transform preserved")
         
         return True, f"Created camera '{obj.name}' with {lens}mm lens at {location}"
     
@@ -1755,14 +1974,22 @@ def _execute_duplicate_object(action: Dict[str, Any]) -> Tuple[bool, str]:
 
 
 def _execute_create_empty(action: Dict[str, Any]) -> Tuple[bool, str]:
-    """Execute create_empty action using Blender 4.0.1 API."""
+    """Execute create_empty action using Blender 4.0.1 API with transform_space and parent support."""
     try:
         empty_type = action["empty_type"]
-        location = action["location"]
+        location = Vector(action["location"])
         rotation = action["rotation"]
         scale = action["scale"]
         radius = action["radius"]
         name = action.get("name")
+        transform_space = action.get("transform_space", "WORLD")
+        parent_name = action.get("parent")
+        
+        # Log transform mode
+        if parent_name:
+            _log_diagnostic(f"Creating empty: name={name}, parent={parent_name}, transform_space={transform_space}, location={location}")
+        else:
+            _log_diagnostic(f"Creating empty: name={name}, transform_space={transform_space}, location={location}")
         
         # Create empty via operator
         bpy.ops.object.empty_add(
@@ -1779,6 +2006,23 @@ def _execute_create_empty(action: Dict[str, Any]) -> Tuple[bool, str]:
         
         if name:
             obj.name = name
+        
+        # Handle parenting if parent specified
+        if parent_name:
+            parent_obj = bpy.data.objects.get(parent_name)
+            if not parent_obj:
+                return False, f"Parent object '{parent_name}' not found"
+            
+            if transform_space == "LOCAL":
+                obj.parent = parent_obj
+                obj.location = location
+                obj.rotation_euler = rotation
+                obj.scale = scale
+                _log_diagnostic(f"  Parented '{obj.name}' to '{parent_name}' with LOCAL transform")
+            else:
+                obj.parent = parent_obj
+                obj.matrix_parent_inverse = parent_obj.matrix_world.inverted()
+                _log_diagnostic(f"  Parented '{obj.name}' to '{parent_name}' with WORLD transform preserved")
         
         _log_diagnostic(f"Created asset root: {obj.name} (type: {empty_type})")
         
@@ -2050,10 +2294,12 @@ def _execute_delete_group(action: Dict[str, Any]) -> Tuple[bool, str]:
 
 
 def _execute_parent_objects(action: Dict[str, Any]) -> Tuple[bool, str]:
-    """Execute parent_objects action - creates parent-child relationships."""
+    """Execute parent_objects action - creates parent-child relationships with transform_space support."""
     try:
         parent_name = action["parent"]
         children_names = action["children"]
+        transform_space = action.get("transform_space", "WORLD")
+        # keep_transform is legacy - transform_space takes precedence
         
         parent_obj = bpy.data.objects.get(parent_name)
         if not parent_obj:
@@ -2073,13 +2319,21 @@ def _execute_parent_objects(action: Dict[str, Any]) -> Tuple[bool, str]:
             _log_diagnostic(f"Parenting failed - missing children: {missing_str}")
             return False, f"Child object(s) not found: {missing_str}"
         
-        _log_diagnostic(f"Parenting {len(child_objects)} component(s) to '{parent_name}': {', '.join(children_names)}")
+        _log_diagnostic(f"Parenting {len(child_objects)} component(s) to '{parent_name}' with transform_space={transform_space}: {', '.join(children_names)}")
         
-        # Set parent for each child (keep transform)
+        # Set parent for each child
         for child_obj in child_objects:
-            child_obj.parent = parent_obj
-            child_obj.matrix_parent_inverse = parent_obj.matrix_world.inverted()
-            _log_diagnostic(f"  Parented '{child_obj.name}' to '{parent_name}'")
+            if transform_space == "LOCAL":
+                # For LOCAL: compute and set local transform relative to parent
+                # Child's current world transform becomes local relative to parent
+                child_obj.parent = parent_obj
+                # matrix_parent_inverse defaults to identity, making local transform = world transform relative to parent
+                _log_diagnostic(f"  Parented '{child_obj.name}' to '{parent_name}' with LOCAL transform (computed from current world)")
+            else:
+                # For WORLD: preserve world transform (legacy behavior)
+                child_obj.parent = parent_obj
+                child_obj.matrix_parent_inverse = parent_obj.matrix_world.inverted()
+                _log_diagnostic(f"  Parented '{child_obj.name}' to '{parent_name}' with WORLD transform preserved")
         
         _log_diagnostic(f"Parented {len(child_objects)} component(s) to '{parent_name}'")
         
