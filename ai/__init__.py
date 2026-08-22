@@ -1,5 +1,5 @@
 # Blender AI Agent - AI Module
-from . import client, prompts, actions
+from . import client, prompts, actions, capabilities, scene_planner
 
 def register():
     pass

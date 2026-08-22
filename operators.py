@@ -112,6 +112,46 @@ class BLENDER_AI_AGENT_OT_test_connection(Operator):
         return {'FINISHED'}
 
 
+class OBJECT_OT_execute_scene_plan(Operator):
+    bl_idname = "blender_ai_agent.execute_scene_plan"
+    bl_label = "Execute Scene Plan"
+    bl_description = "Execute a structured scene plan with multiple actions"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    plan_data: bpy.props.StringProperty(
+        name="Scene Plan Data",
+        description="JSON string containing the scene plan",
+        default="",
+    )
+
+    def execute(self, context):
+        if not self.plan_data.strip():
+            self.report({'WARNING'}, "Empty scene plan")
+            return {'CANCELLED'}
+
+        try:
+            import json
+            plan_data = json.loads(self.plan_data)
+            
+            from .ai.scene_planner import parse_and_execute_scene
+            result = parse_and_execute_scene(plan_data)
+            
+            if result["success"]:
+                self.report({'INFO'}, result["message"])
+            else:
+                self.report({'ERROR'}, result["message"])
+                return {'CANCELLED'}
+                
+        except json.JSONDecodeError:
+            self.report({'ERROR'}, "Invalid JSON in scene plan")
+            return {'CANCELLED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Scene plan execution failed: {e}")
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
+
+
 class OBJECT_OT_ai_command(Operator):
     bl_idname = "object.ai_command"
     bl_label = "Execute AI Command"
@@ -138,17 +178,36 @@ class OBJECT_OT_ai_command(Operator):
         props.ai_error_message = ""
 
         try:
+            # Collect scene context for context-aware planning
+            from .ai.scene_context import collect_scene_context
+            scene_context = collect_scene_context()
+            
             # Send to NVIDIA API
             props.ai_status = 'PROCESSING'
-            response = send_command(user_command, prefs)
+            response = send_command(user_command, prefs, scene_context=scene_context)
             
-            # Validate response - detect single vs multi-action format
+            # Validate response - detect format
             props.ai_status = 'EXECUTING'
             
-            if isinstance(response, dict) and "actions" in response:
-                # Multi-action format: {"actions": [...]}
-                validated_actions = validate_actions(response)
-                success, message = execute_actions(validated_actions)
+            if isinstance(response, dict):
+                # Scene plan format (V5.3+): {"scene": {...}, "actions": [...]} - MUST CHECK FIRST
+                if "scene" in response and "actions" in response:
+                    from .ai.scene_planner import parse_and_execute_scene
+                    result = parse_and_execute_scene(response)
+                    success = result["success"]
+                    message = result["message"]
+                elif "actions" in response:
+                    # Multi-action format (V3): {"actions": [...]}
+                    validated_actions = validate_actions(response)
+                    success, message = execute_actions(validated_actions)
+                elif "plan" in response:
+                    # Plan format (V5.2+): {"plan": [...]}
+                    validated_actions = validate_actions(response)
+                    success, message = execute_actions(validated_actions)
+                else:
+                    # Single-action format (backward compatible): {"action": "..."}
+                    validated_action = validate_action(response)
+                    success, message = execute_action(validated_action)
             else:
                 # Single-action format (backward compatible): {"action": "..."}
                 validated_action = validate_action(response)
@@ -190,6 +249,7 @@ classes = (
     OBJECT_OT_delete_selected,
     OBJECT_OT_clear_scene,
     OBJECT_OT_ai_command,
+    OBJECT_OT_execute_scene_plan,
     BLENDER_AI_AGENT_OT_test_connection,
 )
 
