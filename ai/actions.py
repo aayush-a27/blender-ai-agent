@@ -1991,13 +1991,12 @@ def _execute_create_empty(action: Dict[str, Any]) -> Tuple[bool, str]:
         else:
             _log_diagnostic(f"Creating empty: name={name}, transform_space={transform_space}, location={location}")
         
-        # Create empty via operator
+        # Create empty via operator (empty_add does not accept scale parameter)
         bpy.ops.object.empty_add(
             type=empty_type,
             radius=radius,
             location=location,
-            rotation=rotation,
-            scale=scale
+            rotation=rotation
         )
         
         obj = bpy.context.active_object
@@ -2006,6 +2005,9 @@ def _execute_create_empty(action: Dict[str, Any]) -> Tuple[bool, str]:
         
         if name:
             obj.name = name
+        
+        # Apply scale (empty_add does not accept scale parameter)
+        obj.scale = scale
         
         # Handle parenting if parent specified
         if parent_name:

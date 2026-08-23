@@ -319,21 +319,61 @@ BLENDER_OPERATIONS = {
         required_params=[],
     ),
 
-    # V5.3 - Radial Duplication
-    "object.duplicate_radial": OperationSchema(
-        operator="object.duplicate_radial",
-        description="Create radial duplicates of an object around a center point",
+    # V5.4 - Linear Duplication
+    "object.duplicate_linear": OperationSchema(
+        operator="object.duplicate_linear",
+        description="Create linear duplicates of an object along an axis",
         params={
             "source": {"type": "string", "description": "Name of the source object to duplicate"},
-            "count": {"type": "integer", "default": 5, "min": 2, "max": 32, "description": "Number of total objects (including original if keep_original)"},
-            "center_x": {"type": "number", "default": 0.0, "description": "X coordinate of radial center"},
-            "center_y": {"type": "number", "default": 0.0, "description": "Y coordinate of radial center"},
-            "center_z": {"type": "number", "default": 0.0, "description": "Z coordinate of radial center"},
-            "axis": {"type": "string", "enum": ["X", "Y", "Z"], "default": "Z", "description": "Rotation axis for radial distribution"},
-            "angle_offset": {"type": "number", "default": 0.0, "description": "Starting angle offset in radians"},
+            "count": {"type": "integer", "default": 5, "min": 2, "max": 100, "description": "Number of total objects (including original if keep_original)"},
+            "axis": {"type": "string", "enum": ["X", "Y", "Z"], "default": "Z", "description": "Axis for linear distribution"},
+            "spacing": {"type": "number", "default": 1.0, "min": 0.001, "description": "Distance between duplicates along the axis"},
+            "start_offset_x": {"type": "number", "default": 0.0, "description": "X offset for the first duplicate relative to source"},
+            "start_offset_y": {"type": "number", "default": 0.0, "description": "Y offset for the first duplicate relative to source"},
+            "start_offset_z": {"type": "number", "default": 0.0, "description": "Z offset for the first duplicate relative to source"},
             "keep_original": {"type": "boolean", "default": True, "description": "Whether to keep the source object"},
         },
         required_params=["source"],
+    ),
+
+    # V5.5 - Mirror/Symmetry
+    "object.mirror_object": OperationSchema(
+        operator="object.mirror_object",
+        description="Create a mirrored copy of an object across a plane",
+        params={
+            "source": {"type": "string", "description": "Name of the source object to mirror"},
+            "plane": {"type": "string", "enum": ["XY", "YZ", "XZ"], "default": "YZ", "description": "Mirror plane (XY, YZ, or XZ)"},
+            "offset": {"type": "number", "default": 0.0, "description": "Plane offset from origin along the normal axis"},
+            "merge": {"type": "boolean", "default": False, "description": "Whether to merge the mirrored object with the source (for closed meshes)"},
+            "keep_original": {"type": "boolean", "default": True, "description": "Whether to keep the source object"},
+        },
+        required_params=["source"],
+    ),
+
+    # V5.7 - Object Alignment
+    "object.align_objects": OperationSchema(
+        operator="object.align_objects",
+        description="Align source object relative to target object using world-space bounding boxes",
+        params={
+            "source": {"type": "string", "description": "Name of the source object to align"},
+            "target": {"type": "string", "description": "Name of the target object to align to"},
+            "axis": {"type": "string", "enum": ["X", "Y", "Z"], "default": "Z", "description": "Axis along which to align"},
+            "mode": {"type": "string", "enum": ["MIN", "CENTER", "MAX"], "default": "CENTER", "description": "Alignment mode: MIN (min bounds), CENTER (centers), MAX (max bounds)"},
+        },
+        required_params=["source", "target"],
+    ),
+
+    # V5.7 - Object Contact Placement
+    "object.place_on": OperationSchema(
+        operator="object.place_on",
+        description="Place source object against target object using world-space bounding boxes",
+        params={
+            "source": {"type": "string", "description": "Name of the source object to place"},
+            "target": {"type": "string", "description": "Name of the target object to place against"},
+            "axis": {"type": "string", "enum": ["X", "Y", "Z"], "default": "Z", "description": "Axis along which to place (Z=on top, X=against X, Y=against Y)"},
+            "offset": {"type": "number", "default": 0.0, "description": "Additional offset from contact point"},
+        },
+        required_params=["source", "target"],
     ),
 }
 

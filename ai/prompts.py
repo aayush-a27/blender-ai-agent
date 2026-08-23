@@ -161,6 +161,47 @@ duplicate_object
   - scale (optional): array of 3 numbers [x, y, z], default [1, 1, 1]
   - name (optional): string name for the new object
 
+duplicate_linear
+  Parameters:
+  - source (required): string name of source object to duplicate
+  - count (optional): integer, default 5, minimum 2, maximum 100. Total number of objects (including original if keep_original).
+  - axis (optional): "X", "Y", or "Z", default "Z". Axis for linear distribution.
+  - spacing (optional): number, default 1.0, minimum 0.001. Distance between duplicates along the axis.
+  - start_offset_x (optional): number, default 0.0. X offset for the first duplicate relative to source.
+  - start_offset_y (optional): number, default 0.0. Y offset for the first duplicate relative to source.
+  - start_offset_z (optional): number, default 0.0. Z offset for the first duplicate relative to source.
+  - keep_original (optional): boolean, default true. Whether to keep the source object.
+
+mirror_object
+  Parameters:
+  - source (required): string name of source object to mirror
+  - plane (optional): "XY", "YZ", or "XZ", default "YZ". Mirror plane.
+  - offset (optional): number, default 0.0. Plane offset from origin along the normal axis.
+  - merge (optional): boolean, default false. Whether to merge the mirrored object with the source (for closed meshes).
+  - keep_original (optional): boolean, default true. Whether to keep the source object.
+
+align_objects
+  Parameters:
+  - source (required): string name of source object to align
+  - target (required): string name of target object to align to
+  - axis (optional): "X", "Y", or "Z", default "Z". Axis along which to align.
+  - mode (optional): "MIN", "CENTER", or "MAX", default "CENTER". Alignment mode:
+    - MIN: align minimum bounds of source to minimum bounds of target
+    - CENTER: align centers of source and target
+    - MAX: align maximum bounds of source to maximum bounds of target
+  Uses world-space bounding boxes. Works correctly with parented objects and transforms.
+
+place_on
+  Parameters:
+  - source (required): string name of source object to place
+  - target (required): string name of target object to place against
+  - axis (optional): "X", "Y", or "Z", default "Z". Axis along which to place:
+    - "Z": place source on top of target (source bottom = target top + offset)
+    - "X": place source against target along X (source min X = target max X + offset)
+    - "Y": place source against target along Y (source min Y = target max Y + offset)
+  - offset (optional): number, default 0.0. Additional offset from contact point.
+  Uses world-space bounding boxes. Preserves source rotation and scale. Works correctly with parented objects and transforms.
+
 create_empty
   Parameters:
   - empty_type (optional): one of "PLAIN_AXES", "ARROWS", "SINGLE_ARROW", "CIRCLE", "CUBE", "SPHERE", "CONE", default "PLAIN_AXES"
