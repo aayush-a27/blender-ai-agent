@@ -202,6 +202,32 @@ place_on
   - offset (optional): number, default 0.0. Additional offset from contact point.
   Uses world-space bounding boxes. Preserves source rotation and scale. Works correctly with parented objects and transforms.
 
+apply_bevel
+  Parameters:
+  - source (required): string name of source object to bevel
+  - width (optional): number, default 0.05, minimum 0.001. Bevel width (distance from original edge).
+  - segments (optional): integer, default 3, minimum 1, maximum 64. Number of bevel segments (higher = smoother).
+  - limit_method (optional): "ANGLE", "WEIGHT", "VGROUP", or "NONE", default "ANGLE". How to limit bevel application:
+    - ANGLE: bevel edges with angle above limit
+    - WEIGHT: use edge bevel weight
+    - VGROUP: use vertex group
+    - NONE: bevel all edges
+  - angle_limit (optional): number, default 0.523599 (30 degrees), minimum 0.0, maximum 3.14159. Angle limit for ANGLE limit method (radians).
+  - affect (optional): "EDGES" or "VERTICES", default "EDGES". What to bevel.
+  Uses a non-destructive Bevel modifier. Preserves source rotation and scale. Works correctly with parented objects and transforms.
+
+  IMPORTANT: All Blender operators MUST use the bpy_op format:
+  {
+    "action": "bpy_op",
+    "operator": "object.apply_bevel",
+    "params": {
+      "source": "ObjectName",
+      "width": 0.1,
+      "segments": 4,
+      "limit_method": "ANGLE"
+    }
+  }
+
 create_empty
   Parameters:
   - empty_type (optional): one of "PLAIN_AXES", "ARROWS", "SINGLE_ARROW", "CIRCLE", "CUBE", "SPHERE", "CONE", default "PLAIN_AXES"

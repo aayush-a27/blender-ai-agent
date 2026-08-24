@@ -375,6 +375,21 @@ BLENDER_OPERATIONS = {
         },
         required_params=["source", "target"],
     ),
+
+    # V5.8 - Bevel/Chamfer
+    "object.apply_bevel": OperationSchema(
+        operator="object.apply_bevel",
+        description="Apply a bevel modifier to a mesh object for rounded/chamfered edges",
+        params={
+            "source": {"type": "string", "description": "Name of the source object to bevel"},
+            "width": {"type": "number", "default": 0.05, "min": 0.001, "description": "Bevel width (distance from original edge)"},
+            "segments": {"type": "integer", "default": 3, "min": 1, "max": 64, "description": "Number of bevel segments (higher = smoother)"},
+            "limit_method": {"type": "string", "enum": ["ANGLE", "WEIGHT", "VGROUP", "NONE"], "default": "ANGLE", "description": "How to limit bevel application"},
+            "angle_limit": {"type": "number", "default": 0.523599, "min": 0.0, "max": 3.14159, "description": "Angle limit for ANGLE limit method (radians)"},
+            "affect": {"type": "string", "enum": ["EDGES", "VERTICES"], "default": "EDGES", "description": "What to bevel: edges or vertices"},
+        },
+        required_params=["source"],
+    ),
 }
 
 

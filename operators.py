@@ -100,6 +100,7 @@ class OBJECT_OT_clear_scene(Operator):
     def execute(self, context):
         bpy.ops.object.select_all(action='SELECT')
         bpy.ops.object.delete()
+        return {'FINISHED'}
 
 
 class OBJECT_OT_duplicate_radial(Operator):
@@ -710,6 +711,101 @@ class OBJECT_OT_place_on(Operator):
         return {'FINISHED'}
 
 
+class OBJECT_OT_apply_bevel(Operator):
+    """Apply a bevel modifier to a mesh object for rounded/chamfered edges."""
+    bl_idname = "object.apply_bevel"
+    bl_label = "Apply Bevel"
+    bl_description = "Apply a bevel modifier to a mesh object for rounded/chamfered edges"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    source: bpy.props.StringProperty(
+        name="Source Object",
+        description="Name of the source object to bevel",
+        default="",
+    )
+
+    width: bpy.props.FloatProperty(
+        name="Width",
+        description="Bevel width (distance from original edge)",
+        default=0.05,
+        min=0.001,
+        max=100.0,
+    )
+
+    segments: bpy.props.IntProperty(
+        name="Segments",
+        description="Number of bevel segments (higher = smoother)",
+        default=3,
+        min=1,
+        max=64,
+    )
+
+    limit_method: bpy.props.EnumProperty(
+        name="Limit Method",
+        description="How to limit bevel application",
+        items=[
+            ('ANGLE', "Angle", "Only bevel edges with angle above limit"),
+            ('WEIGHT', "Weight", "Use edge bevel weight"),
+            ('VGROUP', "Vertex Group", "Use vertex group"),
+            ('NONE', "None", "Bevel all edges"),
+        ],
+        default='ANGLE',
+    )
+
+    angle_limit: bpy.props.FloatProperty(
+        name="Angle Limit",
+        description="Angle limit for ANGLE limit method (radians)",
+        default=0.523599,  # 30 degrees
+        min=0.0,
+        max=3.14159,
+    )
+
+    affect: bpy.props.EnumProperty(
+        name="Affect",
+        description="What to bevel: edges or vertices",
+        items=[
+            ('EDGES', "Edges", "Bevel edges"),
+            ('VERTICES', "Vertices", "Bevel vertices"),
+        ],
+        default='EDGES',
+    )
+
+    def execute(self, context):
+        # Get source object
+        source_obj = bpy.data.objects.get(self.source)
+        if not source_obj:
+            self.report({'ERROR'}, f"Source object '{self.source}' not found")
+            return {'CANCELLED'}
+
+        if source_obj.type != 'MESH':
+            self.report({'ERROR'}, f"Object '{self.source}' is not a mesh")
+            return {'CANCELLED'}
+
+        # Check if bevel modifier already exists
+        bevel_mod = None
+        for mod in source_obj.modifiers:
+            if mod.type == 'BEVEL':
+                bevel_mod = mod
+                break
+
+        if not bevel_mod:
+            # Create new bevel modifier
+            bevel_mod = source_obj.modifiers.new(name="Bevel", type='BEVEL')
+
+        # Configure bevel modifier
+        bevel_mod.width = self.width
+        bevel_mod.segments = self.segments
+        bevel_mod.limit_method = self.limit_method
+        bevel_mod.angle_limit = self.angle_limit
+        bevel_mod.affect = self.affect
+
+        # Ensure the modifier is applied to the object
+        # Note: We keep it as a modifier (non-destructive) rather than applying it
+
+        self.report({'INFO'}, f"Applied bevel to '{self.source}': width={self.width}, segments={self.segments}, limit_method={self.limit_method}")
+        return {'FINISHED'}
+
+
 class BLENDER_AI_AGENT_OT_test_connection(Operator):
     bl_idname = "blender_ai_agent.test_connection"
     bl_label = "Test NVIDIA Nemotron Connection"
@@ -807,14 +903,15 @@ class OBJECT_OT_ai_command(Operator):
         props = context.scene.blender_ai_agent
         prefs = context.preferences.addons[__package__].preferences
 
-        # Read command from text block (multiline support)
-        text_block_name = props.ai_command_text_block or "BlenderAICommand"
-        text_block = bpy.data.texts.get(text_block_name)
-        if text_block:
-            user_command = text_block.as_string()
-        else:
-            # Fallback to legacy single-line property
-            user_command = self.command or props.ai_command
+        # Read command from property first (takes precedence)
+        user_command = props.ai_command or ""
+        
+        # Fallback to text block (multiline support) only if property is empty
+        if not user_command.strip():
+            text_block_name = props.ai_command_text_block or "BlenderAICommand"
+            text_block = bpy.data.texts.get(text_block_name)
+            if text_block:
+                user_command = text_block.as_string()
 
         if not user_command.strip():
             self.report({'WARNING'}, "Empty command")
@@ -910,6 +1007,7 @@ classes = (
     OBJECT_OT_mirror_object,
     OBJECT_OT_align_objects,
     OBJECT_OT_place_on,
+    OBJECT_OT_apply_bevel,
 )
 
 
