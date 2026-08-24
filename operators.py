@@ -806,6 +806,55 @@ class OBJECT_OT_apply_bevel(Operator):
         return {'FINISHED'}
 
 
+class OBJECT_OT_set_shading(Operator):
+    """Set smooth or flat shading on a mesh object."""
+    bl_idname = "object.set_shading"
+    bl_label = "Set Shading"
+    bl_description = "Set smooth or flat shading on a mesh object"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    source: bpy.props.StringProperty(
+        name="Source Object",
+        description="Name of the mesh object to set shading on",
+        default="",
+    )
+
+    mode: bpy.props.EnumProperty(
+        name="Mode",
+        description="Shading mode: SMOOTH for smooth shading, FLAT for flat shading",
+        items=[
+            ('SMOOTH', "Smooth", "Smooth shading"),
+            ('FLAT', "Flat", "Flat shading"),
+        ],
+        default='SMOOTH',
+    )
+
+    def execute(self, context):
+        # Get source object
+        source_obj = bpy.data.objects.get(self.source)
+        if not source_obj:
+            self.report({'ERROR'}, f"Source object '{self.source}' not found")
+            return {'CANCELLED'}
+
+        if source_obj.type != 'MESH':
+            self.report({'ERROR'}, f"Object '{self.source}' is not a mesh")
+            return {'CANCELLED'}
+
+        # Set shading mode directly on mesh polygons
+        if self.mode == 'SMOOTH':
+            for poly in source_obj.data.polygons:
+                poly.use_smooth = True
+        else:
+            for poly in source_obj.data.polygons:
+                poly.use_smooth = False
+
+        # Ensure mesh data is updated
+        source_obj.data.update()
+
+        self.report({'INFO'}, f"Set {self.mode.lower()} shading on '{self.source}'")
+        return {'FINISHED'}
+
+
 class BLENDER_AI_AGENT_OT_test_connection(Operator):
     bl_idname = "blender_ai_agent.test_connection"
     bl_label = "Test NVIDIA Nemotron Connection"
@@ -1008,6 +1057,7 @@ classes = (
     OBJECT_OT_align_objects,
     OBJECT_OT_place_on,
     OBJECT_OT_apply_bevel,
+    OBJECT_OT_set_shading,
 )
 
 

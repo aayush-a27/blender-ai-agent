@@ -228,6 +228,24 @@ apply_bevel
     }
   }
 
+set_shading
+  Parameters:
+  - source (required): string name of the mesh object to set shading on
+  - mode (optional): "SMOOTH" or "FLAT", default "SMOOTH". Shading mode:
+    - SMOOTH: smooth shading (interpolated normals)
+    - FLAT: flat shading (faceted appearance)
+  Uses Blender's native shade_smooth/shade_flat operations. Works correctly with parented objects and transforms.
+
+  IMPORTANT: All Blender operators MUST use the bpy_op format:
+  {
+    "action": "bpy_op",
+    "operator": "object.set_shading",
+    "params": {
+      "source": "ObjectName",
+      "mode": "SMOOTH"
+    }
+  }
+
 create_empty
   Parameters:
   - empty_type (optional): one of "PLAIN_AXES", "ARROWS", "SINGLE_ARROW", "CIRCLE", "CUBE", "SPHERE", "CONE", default "PLAIN_AXES"

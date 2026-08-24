@@ -390,6 +390,17 @@ BLENDER_OPERATIONS = {
         },
         required_params=["source"],
     ),
+
+    # V5.9 - Shading
+    "object.set_shading": OperationSchema(
+        operator="object.set_shading",
+        description="Set smooth or flat shading on a mesh object",
+        params={
+            "source": {"type": "string", "description": "Name of the mesh object to set shading on"},
+            "mode": {"type": "string", "enum": ["SMOOTH", "FLAT"], "default": "SMOOTH", "description": "Shading mode: SMOOTH for smooth shading, FLAT for flat shading"},
+        },
+        required_params=["source", "mode"],
+    ),
 }
 
 
